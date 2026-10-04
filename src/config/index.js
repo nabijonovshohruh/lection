@@ -7,4 +7,7 @@ module.exports = {
   botToken: process.env.BOT_TOKEN,
   webAppUrl: process.env.WEBAPP_URL,
   adminTelegramId: process.env.ADMIN_TELEGRAM_ID,
+  // Sozlansa, bot getUpdates polling o'rniga webhook rejimida ishlaydi (masalan,
+  // Railway'dagi bot service'ning public domeni, https:// prefiksisiz yoki bilan).
+  webhookDomain: process.env.WEBHOOK_DOMAIN,
 };

@@ -40,7 +40,9 @@ module.exports = async function telegramAuthMiddleware(req, res, next) {
     if (!user) {
       return res.status(404).json({ message: "Foydalanuvchi topilmadi. Avval botda /start bosing." });
     }
-    req.user = user;
+    // ADMIN_TELEGRAM_ID bazadagi eski roldan ustun turadi — har so'rovda tekshiriladi,
+    // shunda /start qayta bosilmasa ham admin holati to'g'ri ko'rsatiladi.
+    req.user = await usersService.ensureAdminRole(user);
     next();
   } catch (err) {
     next(err);

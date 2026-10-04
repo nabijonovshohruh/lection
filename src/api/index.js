@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const config = require('../config');
 const routes = require('./routes');
+const { ensureReady } = require('../db/ensureReady');
 
 const app = express();
 
@@ -46,8 +47,15 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ message: err.message || 'Internal server error' });
 });
 
-app.listen(config.port, () => {
-  console.log(`API server listening on port ${config.port}`);
-});
+ensureReady()
+  .then(() => {
+    app.listen(config.port, () => {
+      console.log(`API server listening on port ${config.port}`);
+    });
+  })
+  .catch((err) => {
+    console.error('Startup failed (migration/admin check):', err);
+    process.exit(1);
+  });
 
 module.exports = app;

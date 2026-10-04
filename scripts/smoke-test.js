@@ -76,6 +76,28 @@ async function main() {
         "ADMIN_TELEGRAM_ID bilan mos kelgan YANGI foydalanuvchi to'g'ridan-to'g'ri admin bo'lib yaratildi",
         freshAdmin.role === 'admin'
       );
+
+      // telegramAuth/attachUser middleware'lari aynan shu ketma-ketlikni bajaradi
+      // (avval o'qish, keyin admin tekshiruvi) — asosiy xato shu yerda edi, shuning
+      // uchun findOrCreateByTelegramId'ga tegmasdan to'g'ridan-to'g'ri sinaymiz.
+      const middlewareTestTelegramId = BASE_TELEGRAM_ID + 10;
+      const middlewareTestUser = await usersService.findOrCreateByTelegramId({
+        telegram_id: middlewareTestTelegramId,
+        full_name: 'Smoke Test Middleware User',
+      });
+      testUserIds.push(middlewareTestUser.id);
+      check(
+        "Middleware testi uchun foydalanuvchi avval 'student' bo'lib yaratildi",
+        middlewareTestUser.role === 'student'
+      );
+
+      config.adminTelegramId = String(middlewareTestTelegramId);
+      const rawUser = await usersService.findByTelegramId(middlewareTestTelegramId);
+      const healedUser = await usersService.ensureAdminRole(rawUser);
+      check(
+        'API/bot middleware ketma-ketligi (findByTelegramId + ensureAdminRole) to\'g\'ri ishlaydi',
+        healedUser.role === 'admin'
+      );
     } finally {
       config.adminTelegramId = originalAdminTelegramId;
     }

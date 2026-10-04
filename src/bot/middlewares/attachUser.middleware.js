@@ -4,7 +4,8 @@ async function attachUser(ctx, next) {
   const telegramId = ctx.from?.id;
   if (!telegramId) return next();
 
-  ctx.user = await usersService.findByTelegramId(telegramId);
+  const user = await usersService.findByTelegramId(telegramId);
+  ctx.user = user ? await usersService.ensureAdminRole(user) : null;
   return next();
 }
 

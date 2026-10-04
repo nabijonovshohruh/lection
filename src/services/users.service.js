@@ -2,7 +2,8 @@ const pool = require('../db/pool');
 const config = require('../config');
 
 function isConfiguredAdmin(telegramId) {
-  return Boolean(config.adminTelegramId) && String(telegramId) === String(config.adminTelegramId);
+  const configured = config.adminTelegramId ? String(config.adminTelegramId).trim() : '';
+  return Boolean(configured) && String(telegramId).trim() === configured;
 }
 
 // ADMIN_TELEGRAM_ID doim haqiqat manbai: shu ID bilan kirgan foydalanuvchi
@@ -95,6 +96,7 @@ module.exports = {
   findByTelegramId,
   findById,
   findOrCreateByTelegramId,
+  ensureAdminRole,
   listUsers,
   updateUser,
   getMyEnrollments,
