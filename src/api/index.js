@@ -32,6 +32,13 @@ app.use(express.json());
 // ishlaydi va alohida static hosting kerak bo'lmaydi.
 app.use(express.static(path.join(__dirname, '../../miniapp')));
 
+// /api/* javoblari X-Telegram-Init-Data sarlavhasiga qarab har foydalanuvchi
+// uchun boshqacha bo'ladi, URL esa bir xil — shared cache (CDN/proksi) buni
+// URL bo'yicha keshlab, boshqa foydalanuvchiga eski javobni bermasligi uchun.
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 app.use('/api', routes);
 
 app.use((req, res) => {

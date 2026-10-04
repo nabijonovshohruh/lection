@@ -35,14 +35,24 @@ module.exports = async function telegramAuthMiddleware(req, res, next) {
   const telegramUser = JSON.parse(params.get('user'));
   req.telegramUser = telegramUser;
 
+  console.log(
+    `[auth] initData'dan ajratilgan foydalanuvchi: id=${telegramUser.id} (${typeof telegramUser.id}), ` +
+      `path=${req.path}`
+  );
+
   try {
     const user = await usersService.findByTelegramId(telegramUser.id);
     if (!user) {
+      console.log(`[auth] telegram_id=${telegramUser.id} bo'yicha foydalanuvchi bazada topilmadi`);
       return res.status(404).json({ message: "Foydalanuvchi topilmadi. Avval botda /start bosing." });
     }
+    console.log(`[auth] bazadan topildi: user#${user.id} role='${user.role}'`);
+
     // ADMIN_TELEGRAM_ID bazadagi eski roldan ustun turadi — har so'rovda tekshiriladi,
     // shunda /start qayta bosilmasa ham admin holati to'g'ri ko'rsatiladi.
     req.user = await usersService.ensureAdminRole(user);
+    console.log(`[auth] req.user yakuniy: user#${req.user.id} role='${req.user.role}'`);
+
     next();
   } catch (err) {
     next(err);

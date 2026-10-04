@@ -7,10 +7,13 @@ tg?.expand();
 const app = document.getElementById('app');
 let me = null;
 
+// Qasddan keshlanmaydi: Telegram WebView ko'pincha JS kontekstini ochiq
+// saqlab qoladi (sessiya davomida "qayta ochish" aslida sovuq qayta
+// yuklanmasligi mumkin), shuning uchun agar bir marta "student" keshlansa,
+// server tomonda rol tuzatilgandan keyin ham eski qiymat ko'rsatiladi.
+// Har bir navigatsiyada /users/me'ni yangidan so'raymiz.
 async function ensureUser() {
-  if (!me) {
-    me = await apiRequest('/users/me');
-  }
+  me = await apiRequest('/users/me');
   return me;
 }
 

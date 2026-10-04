@@ -3,6 +3,7 @@ const usersService = require('../../services/users.service');
 async function me(req, res, next) {
   try {
     const enrollments = await usersService.getMyEnrollments(req.user.id);
+    console.log(`[users.me] javob qaytarilmoqda: user#${req.user.id} role='${req.user.role}'`);
     res.json({ ...req.user, enrollments });
   } catch (err) {
     next(err);

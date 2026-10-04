@@ -98,6 +98,23 @@ async function main() {
         'API/bot middleware ketma-ketligi (findByTelegramId + ensureAdminRole) to\'g\'ri ishlaydi',
         healedUser.role === 'admin'
       );
+
+      // Railway Variables'ga qiymat probel/qo'shtirnoq bilan noto'g'ri kiritilsa ham ishlashi kerak
+      const quotedTelegramId = BASE_TELEGRAM_ID + 11;
+      const quotedUser = await usersService.findOrCreateByTelegramId({
+        telegram_id: quotedTelegramId,
+        full_name: 'Smoke Test Quoted Admin',
+      });
+      testUserIds.push(quotedUser.id);
+
+      config.adminTelegramId = `  "${quotedTelegramId}"  `;
+      const healedQuotedUser = await usersService.ensureAdminRole(
+        await usersService.findByTelegramId(quotedTelegramId)
+      );
+      check(
+        "ADMIN_TELEGRAM_ID atrofida probel/qo'shtirnoq bo'lsa ham mos kelish aniqlanadi",
+        healedQuotedUser.role === 'admin'
+      );
     } finally {
       config.adminTelegramId = originalAdminTelegramId;
     }

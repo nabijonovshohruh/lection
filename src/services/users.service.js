@@ -1,17 +1,45 @@
 const pool = require('../db/pool');
 const config = require('../config');
 
+// Probel va tasodifiy qo'shtirnoqlardan (Railway Variables'ga qiymat
+// noto'g'ri formatda kiritilsa) tozalaydi, so'ng solishtiradi.
+function normalizeId(value) {
+  return String(value).trim().replace(/^['"]+|['"]+$/g, '');
+}
+
 function isConfiguredAdmin(telegramId) {
-  const configured = config.adminTelegramId ? String(config.adminTelegramId).trim() : '';
-  return Boolean(configured) && String(telegramId).trim() === configured;
+  const configured = config.adminTelegramId ? normalizeId(config.adminTelegramId) : '';
+  const incoming = normalizeId(telegramId);
+  const result = Boolean(configured) && incoming === configured;
+
+  console.log(
+    `[admin-check] incoming=${JSON.stringify(incoming)} (${typeof telegramId}) ` +
+      `configured=${JSON.stringify(configured)} (${typeof config.adminTelegramId}) match=${result}`
+  );
+
+  return result;
 }
 
 // ADMIN_TELEGRAM_ID doim haqiqat manbai: shu ID bilan kirgan foydalanuvchi
 // bazadagi eski roliga qaramay har safar /start bosganda qayta "admin" qilib qo'yiladi.
 async function ensureAdminRole(user) {
-  if (user && user.role !== 'admin' && isConfiguredAdmin(user.telegram_id)) {
-    return updateUser(user.id, { role: 'admin' });
+  if (!user) return user;
+
+  if (user.role === 'admin') {
+    console.log(`[ensure-admin] user#${user.id} (telegram_id=${user.telegram_id}) allaqachon admin`);
+    return user;
   }
+
+  if (isConfiguredAdmin(user.telegram_id)) {
+    console.log(`[ensure-admin] user#${user.id} (telegram_id=${user.telegram_id}) admin'ga yangilanmoqda`);
+    const updated = await updateUser(user.id, { role: 'admin' });
+    console.log(`[ensure-admin] yangilandi: role=${updated?.role}`);
+    return updated;
+  }
+
+  console.log(
+    `[ensure-admin] user#${user.id} (telegram_id=${user.telegram_id}) admin emas, role='${user.role}' qoladi`
+  );
   return user;
 }
 
