@@ -5,8 +5,17 @@ const assignMentorFlow = require('../flows/assignMentor.flow');
 const newLessonFlow = require('../flows/newLesson.flow');
 const coursesService = require('../../services/courses.service');
 const lessonsService = require('../../services/lessons.service');
+const config = require('../../config');
 
 module.exports = function registerAdminHandler(bot) {
+  bot.command('admin', requireRole('admin'), async (ctx) => {
+    return ctx.reply('Admin panelga xush kelibsiz!', {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Admin Panel', web_app: { url: `${config.webAppUrl}#admin` } }]],
+      },
+    });
+  });
+
   bot.command('newcourse', requireRole('admin'), newCourseFlow.start);
   bot.command('newgroup', requireRole('admin'), newGroupFlow.start);
   bot.command('assignmentor', requireRole('admin'), assignMentorFlow.start);

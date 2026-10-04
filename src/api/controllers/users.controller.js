@@ -22,7 +22,9 @@ async function getById(req, res, next) {
   try {
     const user = await usersService.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    res.json(user);
+
+    const enrollments = await usersService.getMyEnrollments(user.id);
+    res.json({ ...user, enrollments });
   } catch (err) {
     next(err);
   }

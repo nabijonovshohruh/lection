@@ -1,5 +1,6 @@
 require('dotenv').config();
 const pool = require('../src/db/pool');
+const config = require('../src/config');
 const coursesService = require('../src/services/courses.service');
 const groupsService = require('../src/services/groups.service');
 const usersService = require('../src/services/users.service');
@@ -7,6 +8,7 @@ const lessonsService = require('../src/services/lessons.service');
 const progressService = require('../src/services/progress.service');
 const warningsService = require('../src/services/warnings.service');
 const homeworkService = require('../src/services/homework.service');
+const enrollmentsService = require('../src/services/enrollments.service');
 
 // Haqiqiy Postgres'ga ulanib, asosiy biznes qoidalarni (guruh sig'imi, 4-ogohlantirish,
 // videoni o'tkazib yubormaslik, uy vazifasi) tekshiradi. Yaratgan hamma test ma'lumotini
@@ -48,6 +50,36 @@ async function main() {
     });
     testUserIds.push(studentA.id, studentB.id, studentC.id);
 
+    // 0) ADMIN_TELEGRAM_ID orqali admin rolini avtomatik aniqlash (self-heal)
+    check("Yangi foydalanuvchi avval 'student' bo'lib yaratildi", studentA.role === 'student');
+
+    const originalAdminTelegramId = config.adminTelegramId;
+    try {
+      config.adminTelegramId = String(studentA.telegram_id);
+      const promoted = await usersService.findOrCreateByTelegramId({
+        telegram_id: studentA.telegram_id,
+        full_name: studentA.full_name,
+      });
+      check(
+        "ADMIN_TELEGRAM_ID mos kelgach, mavjud foydalanuvchi qayta /start'da admin'ga yangilandi",
+        promoted.role === 'admin'
+      );
+
+      const freshAdminTelegramId = BASE_TELEGRAM_ID + 9;
+      config.adminTelegramId = String(freshAdminTelegramId);
+      const freshAdmin = await usersService.findOrCreateByTelegramId({
+        telegram_id: freshAdminTelegramId,
+        full_name: 'Smoke Test Fresh Admin',
+      });
+      testUserIds.push(freshAdmin.id);
+      check(
+        "ADMIN_TELEGRAM_ID bilan mos kelgan YANGI foydalanuvchi to'g'ridan-to'g'ri admin bo'lib yaratildi",
+        freshAdmin.role === 'admin'
+      );
+    } finally {
+      config.adminTelegramId = originalAdminTelegramId;
+    }
+
     // 1) Guruh sig'imi (capacity trigger)
     await groupsService.addStudentToGroup(group.id, studentA.id);
     await groupsService.addStudentToGroup(group.id, studentB.id);
@@ -88,6 +120,14 @@ async function main() {
       is_published: true,
     });
 
+    const lessonWithResource = await lessonsService.updateLesson(lesson.id, {
+      resource_url: 'https://example.com/handout.pdf',
+    });
+    check(
+      "Darsga resource_url (PDF/material havolasi) saqlandi",
+      lessonWithResource.resource_url === 'https://example.com/handout.pdf'
+    );
+
     let pos = 0;
     while (pos < 50) {
       pos = Math.min(pos + 5, 50);
@@ -118,6 +158,25 @@ async function main() {
     });
     const reviewed = await homeworkService.reviewSubmission(submission.id, { status: 'approved' });
     check("Uy vazifasi topshirildi va 'approved' deb belgilandi", reviewed.status === 'approved');
+
+    // 5) Guruhsiz kursga kirish huquqini berish/bekor qilish (admin panel funksiyasi)
+    const granted = await enrollmentsService.grantAccess(studentC.id, course.id);
+    check(
+      "Guruhsiz kursga kirish huquqi berildi (status=active, group_id=null)",
+      granted.status === 'active' && granted.group_id === null
+    );
+
+    const revoked = await enrollmentsService.revokeAccess(studentC.id, course.id);
+    check("Kirish huquqi bekor qilindi (status='dropped')", revoked.status === 'dropped');
+
+    const regranted = await enrollmentsService.grantAccess(studentC.id, course.id);
+    check("Bekor qilingan kirish qayta berilganda status yana 'active' bo'ldi", regranted.status === 'active');
+
+    const roster = await enrollmentsService.listEnrollmentsForCourse(course.id);
+    check(
+      'Kurs ro\'yxatida (listEnrollmentsForCourse) yozilishlar ko\'rinadi',
+      roster.some((r) => r.user_id === studentC.id)
+    );
   } finally {
     if (course) await coursesService.deleteCourse(course.id);
     if (testUserIds.length) {

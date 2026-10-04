@@ -54,10 +54,16 @@ async function handleText(ctx) {
   if (flow.step === 5) {
     flow.data.homework_text = text === '-' ? null : text;
     flow.step = 6;
-    return ctx.reply("Darsni hoziroq e'lon qilasizmi? (ha/yo'q)");
+    return ctx.reply("Qo'shimcha material (PDF/resurs) havolasi bo'lsa kiriting, bo'lmasa \"-\" deb yozing:");
   }
 
   if (flow.step === 6) {
+    flow.data.resource_url = text === '-' ? null : text;
+    flow.step = 7;
+    return ctx.reply("Darsni hoziroq e'lon qilasizmi? (ha/yo'q)");
+  }
+
+  if (flow.step === 7) {
     const isPublished = /^ha$/i.test(text);
     const existing = await lessonsService.listLessonsByCourse(flow.data.course_id);
     const orderIndex = existing.length + 1;
@@ -66,6 +72,7 @@ async function handleText(ctx) {
       course_id: flow.data.course_id,
       title: flow.data.title,
       video_url: flow.data.video_url,
+      resource_url: flow.data.resource_url,
       duration_seconds: flow.data.duration_seconds,
       homework_text: flow.data.homework_text,
       order_index: orderIndex,

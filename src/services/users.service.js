@@ -1,4 +1,18 @@
 const pool = require('../db/pool');
+const config = require('../config');
+
+function isConfiguredAdmin(telegramId) {
+  return Boolean(config.adminTelegramId) && String(telegramId) === String(config.adminTelegramId);
+}
+
+// ADMIN_TELEGRAM_ID doim haqiqat manbai: shu ID bilan kirgan foydalanuvchi
+// bazadagi eski roliga qaramay har safar /start bosganda qayta "admin" qilib qo'yiladi.
+async function ensureAdminRole(user) {
+  if (user && user.role !== 'admin' && isConfiguredAdmin(user.telegram_id)) {
+    return updateUser(user.id, { role: 'admin' });
+  }
+  return user;
+}
 
 async function findByTelegramId(telegramId) {
   const { rows } = await pool.query('SELECT * FROM users WHERE telegram_id = $1', [telegramId]);
@@ -12,13 +26,19 @@ async function findById(id) {
 
 async function findOrCreateByTelegramId({ telegram_id, username, full_name, language_code }) {
   const existing = await findByTelegramId(telegram_id);
-  if (existing) return existing;
+  if (existing) return ensureAdminRole(existing);
 
   const { rows } = await pool.query(
-    `INSERT INTO users (telegram_id, username, full_name, language_code)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO users (telegram_id, username, full_name, language_code, role)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
-    [telegram_id, username || null, full_name || 'Foydalanuvchi', language_code || 'uz']
+    [
+      telegram_id,
+      username || null,
+      full_name || 'Foydalanuvchi',
+      language_code || 'uz',
+      isConfiguredAdmin(telegram_id) ? 'admin' : 'student',
+    ]
   );
   return rows[0];
 }

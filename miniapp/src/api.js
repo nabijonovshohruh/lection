@@ -19,5 +19,7 @@ export async function apiRequest(path, options = {}) {
     throw new Error(error.message || `Request failed: ${response.status}`);
   }
 
+  if (response.status === 204) return null;
+
   return response.json();
 }

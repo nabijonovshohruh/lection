@@ -12,10 +12,13 @@ module.exports = function registerStartHandler(bot) {
 
     ctx.user = user;
 
+    const buttons =
+      user.role === 'admin'
+        ? [[{ text: 'Admin Panel', web_app: { url: `${config.webAppUrl}#admin` } }]]
+        : [[{ text: 'Kurslarim', web_app: { url: config.webAppUrl } }]];
+
     await ctx.reply(`Xush kelibsiz, ${user.full_name}!`, {
-      reply_markup: {
-        inline_keyboard: [[{ text: 'Kurslarim', web_app: { url: config.webAppUrl } }]],
-      },
+      reply_markup: { inline_keyboard: buttons },
     });
   });
 };

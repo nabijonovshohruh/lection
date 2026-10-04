@@ -17,6 +17,8 @@ app.use(
         'script-src': ["'self'", 'https://telegram.org'],
         // Video darslar har xil tashqi manbalardan (CDN) bo'lishi mumkin
         'media-src': ["'self'", 'https:'],
+        // YouTube/Vimeo videolari <iframe> orqali ko'rsatiladi
+        'frame-src': ["'self'", 'https://www.youtube.com', 'https://player.vimeo.com'],
       },
     },
   })

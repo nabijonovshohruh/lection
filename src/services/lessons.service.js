@@ -18,20 +18,22 @@ async function createLesson({
   title,
   description,
   video_url,
+  resource_url,
   duration_seconds,
   homework_text,
   order_index,
   is_published,
 }) {
   const { rows } = await pool.query(
-    `INSERT INTO lessons (course_id, title, description, video_url, duration_seconds, homework_text, order_index, is_published)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO lessons (course_id, title, description, video_url, resource_url, duration_seconds, homework_text, order_index, is_published)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
     [
       course_id,
       title,
       description || null,
       video_url || null,
+      resource_url || null,
       duration_seconds || 0,
       homework_text || null,
       order_index,
@@ -46,6 +48,7 @@ async function updateLesson(id, fields) {
     'title',
     'description',
     'video_url',
+    'resource_url',
     'duration_seconds',
     'homework_text',
     'order_index',

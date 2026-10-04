@@ -7,6 +7,7 @@ const usersRoutes = require('./users.routes');
 const progressRoutes = require('./progress.routes');
 const warningsRoutes = require('./warnings.routes');
 const homeworkRoutes = require('./homework.routes');
+const enrollmentsRoutes = require('./enrollments.routes');
 
 const router = express.Router();
 
@@ -19,5 +20,6 @@ router.use('/users', usersRoutes);
 router.use('/progress', progressRoutes);
 router.use('/warnings', warningsRoutes);
 router.use('/homework', homeworkRoutes);
+router.use('/enrollments', enrollmentsRoutes);
 
 module.exports = router;
