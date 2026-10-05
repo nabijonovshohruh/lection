@@ -30,7 +30,18 @@ app.use(express.json());
 
 // Mini App (miniapp/) shu serverdan beriladi, shunda API bilan bitta origin'da
 // ishlaydi va alohida static hosting kerak bo'lmaydi.
-app.use(express.static(path.join(__dirname, '../../miniapp')));
+// Telegram'ning ichki WebView'lari (ayniqsa Desktop) ba'zan Cache-Control: max-age=0'ni
+// to'g'ri qayta tekshirmasdan eski main.js'ni keshdan beraveradi — shuning uchun
+// bu yerda eng qattiq "no-store" ko'rsatmasini qo'yamiz.
+app.use(
+  express.static(path.join(__dirname, '../../miniapp'), {
+    etag: false,
+    lastModified: false,
+    setHeaders: (res) => {
+      res.set('Cache-Control', 'no-store');
+    },
+  })
+);
 
 // /api/* javoblari X-Telegram-Init-Data sarlavhasiga qarab har foydalanuvchi
 // uchun boshqacha bo'ladi, URL esa bir xil — shared cache (CDN/proksi) buni
