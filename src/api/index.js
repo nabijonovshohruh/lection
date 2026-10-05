@@ -14,8 +14,8 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        // Telegram Mini App SDK shu domendan yuklanadi
-        'script-src': ["'self'", 'https://telegram.org'],
+        // Telegram Mini App SDK va YouTube IFrame Player API shu domenlardan yuklanadi
+        'script-src': ["'self'", 'https://telegram.org', 'https://www.youtube.com'],
         // Video darslar har xil tashqi manbalardan (CDN) bo'lishi mumkin
         'media-src': ["'self'", 'https:'],
         // YouTube/Vimeo videolari <iframe> orqali ko'rsatiladi

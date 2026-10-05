@@ -51,19 +51,130 @@ function adminNavBar(active) {
   `;
 }
 
-// YouTube/Vimeo havolalari <iframe> orqali, boshqa (fayl/Telegram) havolalar
-// native <video> orqali ko'rsatiladi. Progress avtomatik kuzatuvi faqat <video>
-// uchun ishlaydi — iframe ichidagi pleer holatini JS orqali bilib bo'lmaydi.
+// YouTube havolalari IFrame Player API orqali (progress/anti-skip kuzatuvi bilan),
+// Vimeo oddiy <iframe> orqali (kuzatuvsiz), boshqa (fayl/Telegram) havolalar
+// native <video> orqali (timeupdate/seeking asosida kuzatuv bilan) ko'rsatiladi.
 function getVideoEmbed(url) {
   if (!url) return null;
 
   const youtube = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
-  if (youtube) return { type: 'iframe', src: `https://www.youtube.com/embed/${youtube[1]}` };
+  if (youtube) return { type: 'youtube', videoId: youtube[1] };
 
   const vimeo = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
   if (vimeo) return { type: 'iframe', src: `https://player.vimeo.com/video/${vimeo[1]}` };
 
   return { type: 'video', src: url };
+}
+
+// YouTube IFrame Player API skripti faqat kerak bo'lganda (birinchi YouTube
+// darsi ochilganda) bir marta yuklanadi.
+let youtubeApiPromise = null;
+function loadYouTubeApi() {
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (youtubeApiPromise) return youtubeApiPromise;
+
+  youtubeApiPromise = new Promise((resolve) => {
+    const previous = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previous?.();
+      resolve(window.YT);
+    };
+    const script = document.createElement('script');
+    script.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(script);
+  });
+  return youtubeApiPromise;
+}
+
+// Darsdan chiqishda (navigatsiya yoki qayta render) eski pleerning fon
+// so'rovlarini (seek-nazorati uchun polling) to'xtatish — aks holda ko'rinmas
+// pleer uchun tozalanmagan interval abadiy ishlab, keraksiz so'rov yuboraveradi.
+let activeYoutubePoll = null;
+function clearYoutubePoll() {
+  if (activeYoutubePoll) {
+    clearInterval(activeYoutubePoll);
+    activeYoutubePoll = null;
+  }
+}
+
+async function goToNextLesson(courseId, currentLessonId) {
+  try {
+    const lessons = await apiRequest(`/lessons/course/${courseId}`);
+    const sorted = lessons.slice().sort((a, b) => a.order_index - b.order_index);
+    const currentIndex = sorted.findIndex((l) => l.id === currentLessonId);
+    const next = currentIndex >= 0 ? sorted[currentIndex + 1] : null;
+
+    navTo(next ? `#lesson/${next.id}` : `#course/${courseId}`);
+  } catch {
+    navTo(`#course/${courseId}`);
+  }
+}
+
+// YouTube pleerida HTML5 <video>'dagidek tabiiy "seeking" hodisasi yo'q,
+// shuning uchun joriy vaqtni har soniyada so'rab, oldinga keskin sakrashni
+// (+5s bufer) qo'lda aniqlab, player.seekTo() bilan orqaga qaytaramiz.
+// Progress har 3s haqiqiy ilgarilashda serverga yuboriladi (backend'ning
+// +5s anti-skip bufer bilan yaxshi mos kelishi uchun ozroq qilib olingan),
+// video ENDED bo'lganda esa darhol "Bajarildi" deb belgilanadi va keyingi
+// darsga o'tiladi.
+async function setupYouTubePlayer(videoId, lessonId, lesson, progress) {
+  // Agar shu funksiya qayta chaqirilsa (masalan, uy vazifasi topshirilgach
+  // renderLesson() o'sha darsni qayta chizsa), avvalgi pleerning polling
+  // interval'i darhol to'xtatiladi — yangi pleer tayyor bo'lishini kutmasdan.
+  clearYoutubePoll();
+
+  const YT = await loadYouTubeApi();
+
+  let maxWatched = progress.max_watched_seconds || 0;
+  let lastReported = maxWatched;
+  let ended = false;
+
+  const sendProgress = (position) =>
+    apiRequest(`/progress/lesson/${lessonId}`, {
+      method: 'POST',
+      body: JSON.stringify({ position_seconds: Math.floor(position) }),
+    }).catch(() => {});
+
+  new YT.Player('ytPlayer', {
+    videoId,
+    playerVars: { rel: 0, modestbranding: 1, playsinline: 1 },
+    events: {
+      onReady(event) {
+        if (maxWatched > 0) {
+          event.target.seekTo(maxWatched, true);
+        }
+
+        clearYoutubePoll();
+        activeYoutubePoll = setInterval(() => {
+          if (ended) return;
+
+          const current = event.target.getCurrentTime();
+
+          // Oldinga sakrab o'tkazib yuborishni cheklash
+          if (current > maxWatched + 5) {
+            event.target.seekTo(maxWatched, true);
+            return;
+          }
+
+          if (current > maxWatched) {
+            maxWatched = current;
+          }
+          if (current - lastReported >= 3) {
+            lastReported = current;
+            sendProgress(current);
+          }
+        }, 1000);
+      },
+      async onStateChange(event) {
+        if (event.data !== YT.PlayerState.ENDED || ended) return;
+
+        ended = true;
+        clearYoutubePoll();
+        await sendProgress(event.target.getDuration());
+        goToNextLesson(lesson.course_id, lesson.id);
+      },
+    },
+  });
 }
 
 /* ---------------- Talaba sahifalari ---------------- */
@@ -151,10 +262,12 @@ async function renderLesson(lessonId) {
     <button id="backBtn" class="link-btn">&larr; Darslar</button>
     <h2>${lesson.title}</h2>
     ${
-      embed?.type === 'iframe'
-        ? `<iframe width="100%" height="220" src="${embed.src}" frameborder="0" allowfullscreen></iframe>
-           <p class="badge">Bu video uchun ko'rish foizi avtomatik kuzatilmaydi</p>`
-        : `<video id="player" controls src="${embed?.src || ''}" style="width:100%"></video>`
+      embed?.type === 'youtube'
+        ? `<div id="ytPlayer"></div>`
+        : embed?.type === 'iframe'
+          ? `<iframe width="100%" height="220" src="${embed.src}" frameborder="0" allowfullscreen></iframe>
+             <p class="badge">Bu video uchun ko'rish foizi avtomatik kuzatilmaydi</p>`
+          : `<video id="player" controls src="${embed?.src || ''}" style="width:100%"></video>`
     }
     <p>${lesson.description || ''}</p>
     ${lesson.resource_url ? `<p><a href="${lesson.resource_url}" target="_blank" rel="noopener">Qo'shimcha material (PDF/resurs)</a></p>` : ''}
@@ -189,6 +302,11 @@ async function renderLesson(lessonId) {
       });
       renderLesson(lessonId);
     });
+  }
+
+  if (embed?.type === 'youtube') {
+    setupYouTubePlayer(embed.videoId, lessonId, lesson, progress);
+    return;
   }
 
   const video = document.getElementById('player');
@@ -587,6 +705,11 @@ function routeAdmin(parts) {
 
 async function router() {
   try {
+    // Har qanday navigatsiyada (orqaga, boshqa darsga o'tish va h.k.) YouTube
+    // pleerining fon polling'ini to'xtatamiz, aks holda u ko'rinmas holda
+    // ishlab, keraksiz so'rovlar yuboraveradi.
+    clearYoutubePoll();
+
     const user = await ensureUser();
     const defaultHash = user.role === 'admin' ? '#admin' : '#courses';
     const parts = (window.location.hash || defaultHash).slice(1).split('/');
