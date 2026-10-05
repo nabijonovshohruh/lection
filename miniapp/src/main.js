@@ -591,7 +591,18 @@ async function router() {
     const defaultHash = user.role === 'admin' ? '#admin' : '#courses';
     const parts = (window.location.hash || defaultHash).slice(1).split('/');
 
-    if (user.role === 'admin' && parts[0] === 'admin') {
+    // Rol har doim hal qiluvchi: agar WebView avvalgi sessiyadan qolgan eski
+    // hash'ni saqlab qolgan bo'lsa (masalan, rol hali "student" bo'lgan
+    // paytdagi "#courses"), uni shunchaki e'tiborsiz qoldirmasdan, to'g'ri
+    // bo'limga majburan qayta yo'naltiramiz.
+    if (user.role === 'admin' && parts[0] !== 'admin') {
+      return navTo('#admin');
+    }
+    if (user.role !== 'admin' && parts[0] === 'admin') {
+      return navTo('#courses');
+    }
+
+    if (user.role === 'admin') {
       return routeAdmin(parts.slice(1));
     }
 
