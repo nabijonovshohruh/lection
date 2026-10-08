@@ -12,7 +12,7 @@ async function me(req, res, next) {
 
 async function list(req, res, next) {
   try {
-    const users = await usersService.listUsers({ role: req.query.role });
+    const users = await usersService.listUsers({ role: req.query.role, search: req.query.search });
     res.json(users);
   } catch (err) {
     next(err);

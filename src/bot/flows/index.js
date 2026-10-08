@@ -5,6 +5,7 @@ const addStudentFlow = require('./addStudent.flow');
 const warnStudentFlow = require('./warnStudent.flow');
 const newLessonFlow = require('./newLesson.flow');
 const reviewHomeworkFlow = require('./reviewHomework.flow');
+const onboardingFlow = require('./onboarding.flow');
 
 const flows = {
   [newCourseFlow.TYPE]: newCourseFlow,
@@ -14,6 +15,7 @@ const flows = {
   [warnStudentFlow.TYPE]: warnStudentFlow,
   [newLessonFlow.TYPE]: newLessonFlow,
   [reviewHomeworkFlow.TYPE]: reviewHomeworkFlow,
+  [onboardingFlow.TYPE]: onboardingFlow,
 };
 
 async function handleFlowText(ctx, next) {

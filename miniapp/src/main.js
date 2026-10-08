@@ -36,6 +36,80 @@ function notify(message) {
   else window.alert(message);
 }
 
+function openModal(contentHtml) {
+  closeModal();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal-box">${contentHtml}</div>`;
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function closeModal() {
+  document.querySelector('.modal-overlay')?.remove();
+}
+
+// Kurs ichida talaba Ism-familiyasi bo'yicha qidirib, bir bosishda
+// tanlangan kursga biriktirish uchun qidiruv modali.
+function openAddStudentModal(courseId, onAdded) {
+  openModal(`
+    <div class="modal-header">
+      <h3>O'quvchi qo'shish</h3>
+      <button id="modalCloseBtn" class="link-btn" type="button">&times;</button>
+    </div>
+    <input type="text" id="studentSearchInput" placeholder="Ism-familiya bo'yicha qidiring..." autocomplete="off" />
+    <div id="studentSearchResults" class="list"></div>
+  `);
+
+  document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+
+  const input = document.getElementById('studentSearchInput');
+  const results = document.getElementById('studentSearchResults');
+  let debounceTimer = null;
+
+  input.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    const query = input.value.trim();
+
+    if (query.length < 2) {
+      results.innerHTML = '<p class="badge">Kamida 2 ta harf kiriting</p>';
+      return;
+    }
+
+    debounceTimer = setTimeout(async () => {
+      const students = await apiRequest(`/users?role=student&search=${encodeURIComponent(query)}`);
+
+      results.innerHTML =
+        students
+          .map(
+            (s) =>
+              `<div class="card" data-id="${s.id}">
+                <strong>${s.full_name}</strong>
+                <span class="badge">${s.username ? '@' + s.username : s.telegram_id}</span>
+              </div>`
+          )
+          .join('') || "<p>Hech kim topilmadi</p>";
+
+      results.querySelectorAll('.card').forEach((el) => {
+        el.addEventListener('click', async () => {
+          await apiRequest('/enrollments', {
+            method: 'POST',
+            body: JSON.stringify({ user_id: Number(el.dataset.id), course_id: Number(courseId) }),
+          });
+          closeModal();
+          onAdded?.();
+        });
+      });
+    }, 300);
+  });
+
+  input.focus();
+}
+
 function wireAdminNav() {
   app.querySelectorAll('[data-nav]').forEach((el) => {
     el.addEventListener('click', () => navTo(`#${el.dataset.nav}`));
@@ -454,6 +528,7 @@ async function renderAdminCourseDetail(courseId) {
     </div>
     <button id="newLessonBtn" class="btn">+ Yangi dars</button>
     <button id="studentsBtn" class="btn">O'quvchilar ro'yxati</button>
+    <button id="addStudentBtn" class="btn">O'quvchi qo'shish</button>
   `;
 
   wireAdminNav();
@@ -461,6 +536,9 @@ async function renderAdminCourseDetail(courseId) {
   app.querySelectorAll('.list .card').forEach((el) => {
     el.addEventListener('click', () => navTo(`#admin/course/${courseId}/lesson/${el.dataset.id}`));
   });
+  document
+    .getElementById('addStudentBtn')
+    .addEventListener('click', () => openAddStudentModal(courseId, () => renderAdminCourseDetail(courseId)));
   document
     .getElementById('newLessonBtn')
     .addEventListener('click', () => navTo(`#admin/course/${courseId}/lesson/new`));
@@ -584,14 +662,14 @@ async function renderAdminCourseStudents(courseId) {
       }
     </div>
 
-    <h3>O'quvchi qo'shish</h3>
-    <form id="grantForm" class="form">
-      <input type="text" id="studentTelegramId" placeholder="O'quvchi Telegram ID" required />
-      <button type="submit" class="btn">Kirish berish</button>
-    </form>
+    <button id="addStudentBtn" class="btn">O'quvchi qo'shish</button>
   `;
 
   wireAdminNav();
+
+  document
+    .getElementById('addStudentBtn')
+    .addEventListener('click', () => openAddStudentModal(courseId, () => renderAdminCourseStudents(courseId)));
 
   app.querySelectorAll('[data-revoke]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -611,25 +689,6 @@ async function renderAdminCourseStudents(courseId) {
       });
       renderAdminCourseStudents(courseId);
     });
-  });
-
-  document.getElementById('grantForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const telegramId = document.getElementById('studentTelegramId').value.trim();
-    if (!telegramId) return;
-
-    const users = await apiRequest('/users');
-    const student = users.find((u) => String(u.telegram_id) === telegramId);
-    if (!student) {
-      notify("Bu Telegram ID bo'yicha foydalanuvchi topilmadi. U avval botda /start bosishi kerak.");
-      return;
-    }
-
-    await apiRequest('/enrollments', {
-      method: 'POST',
-      body: JSON.stringify({ user_id: student.id, course_id: Number(courseId) }),
-    });
-    renderAdminCourseStudents(courseId);
   });
 }
 
@@ -709,6 +768,7 @@ async function router() {
     // pleerining fon polling'ini to'xtatamiz, aks holda u ko'rinmas holda
     // ishlab, keraksiz so'rovlar yuboraveradi.
     clearYoutubePoll();
+    closeModal();
 
     const user = await ensureUser();
     const defaultHash = user.role === 'admin' ? '#admin' : '#courses';

@@ -50,6 +50,16 @@ async function main() {
     });
     testUserIds.push(studentA.id, studentB.id, studentC.id);
 
+    // 0a) Admin panelidagi "O'quvchi qo'shish" qidiruvi — Ism-familiya bo'yicha qidirish
+    const searchMiss = await usersService.listUsers({ role: 'student', search: `Student A ${RUN_ID}` });
+    check("Ism-familiya bo'yicha qidiruv mos kelmagan so'rovda hech narsa topmaydi", searchMiss.length === 0);
+
+    const searchHit = await usersService.listUsers({ role: 'student', search: 'Smoke Test Student A' });
+    check(
+      "Ism-familiya bo'yicha qidiruv to'g'ri foydalanuvchini topadi",
+      searchHit.some((u) => u.id === studentA.id)
+    );
+
     // 0) ADMIN_TELEGRAM_ID orqali admin rolini avtomatik aniqlash (self-heal)
     check("Yangi foydalanuvchi avval 'student' bo'lib yaratildi", studentA.role === 'student');
 

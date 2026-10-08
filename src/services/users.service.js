@@ -72,12 +72,25 @@ async function findOrCreateByTelegramId({ telegram_id, username, full_name, lang
   return rows[0];
 }
 
-async function listUsers({ role } = {}) {
+async function listUsers({ role, search } = {}) {
+  const conditions = [];
+  const params = [];
+
   if (role) {
-    const { rows } = await pool.query('SELECT * FROM users WHERE role = $1 ORDER BY full_name', [role]);
-    return rows;
+    params.push(role);
+    conditions.push(`role = $${params.length}`);
   }
-  const { rows } = await pool.query('SELECT * FROM users ORDER BY full_name');
+
+  if (search) {
+    params.push(`%${search}%`);
+    conditions.push(`full_name ILIKE $${params.length}`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const { rows } = await pool.query(
+    `SELECT * FROM users ${where} ORDER BY full_name LIMIT 50`,
+    params
+  );
   return rows;
 }
 
