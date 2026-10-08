@@ -226,6 +226,47 @@ async function main() {
       'Kurs ro\'yxatida (listEnrollmentsForCourse) yozilishlar ko\'rinadi',
       roster.some((r) => r.user_id === studentC.id)
     );
+
+    // 6) Dars rejasi: SEMINAR turi va uning video'siz bo'lishi, progress hisobiga kirmasligi
+    const seminar = await lessonsService.createLesson({
+      course_id: course.id,
+      title: 'Smoke Test Seminar',
+      type: 'seminar',
+      order_index: 2,
+      scheduled_date: '2026-11-03',
+      mentor_name: 'Aliyev Vali',
+      topics: '1-2 mavzular bo\'yicha savol-javob',
+      start_time: '19:00',
+      end_time: '20:30',
+      is_published: true,
+    });
+    check(
+      'SEMINAR darsi barcha maxsus maydonlar bilan to\'g\'ri saqlandi',
+      seminar.type === 'seminar' &&
+        seminar.mentor_name === 'Aliyev Vali' &&
+        seminar.start_time === '19:00' &&
+        seminar.end_time === '20:30'
+    );
+
+    // Admin panelida sanani bo'sh qoldirib saqlasa (frontend "" yuboradi),
+    // DATE ustuniga "" emas, NULL yozilishi kerak — aks holda Postgres xato beradi.
+    let scheduledDateCleared = false;
+    try {
+      const cleared = await lessonsService.updateLesson(seminar.id, { scheduled_date: '' });
+      scheduledDateCleared = cleared.scheduled_date === null;
+    } catch {
+      scheduledDateCleared = false;
+    }
+    check("Bo'sh scheduled_date (\"\") xatosiz NULL'ga aylantiriladi", scheduledDateCleared);
+
+    // studentB avvalgi bosqichda yagona LECTURE darsni 100% tomosha qilgan edi.
+    // Seminar maxrajga (total_lessons) qo'shilib, foizni "siljitmasligi" kerak.
+    const courseProgress = await progressService.listCourseProgressForMentor(course.id);
+    const studentBProgress = courseProgress.find((p) => p.user_id === studentB.id);
+    check(
+      "SEMINAR darsi umumiy o'zlashtirish hisobiga (total_lessons) qo'shilmaydi",
+      Number(studentBProgress?.total_lessons) === 1 && Number(studentBProgress?.completed_lessons) === 1
+    );
   } finally {
     if (course) await coursesService.deleteCourse(course.id);
     if (testUserIds.length) {

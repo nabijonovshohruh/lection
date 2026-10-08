@@ -67,6 +67,9 @@ async function listProgressByCourse(userId, courseId) {
   return rows;
 }
 
+// Faqat LECTURE darslari video orqali "bajarildi" deb belgilanishi mumkin —
+// seminar/takrorlash kunlari maxrajga qo'shilsa, 100% o'zlashtirish hech qachon
+// yetib bo'lmas qiymatga aylanib qoladi.
 async function listCourseProgressForMentor(courseId) {
   const { rows } = await pool.query(
     `SELECT u.id AS user_id, u.full_name,
@@ -74,7 +77,7 @@ async function listCourseProgressForMentor(courseId) {
             COUNT(lp.id) FILTER (WHERE lp.is_completed) AS completed_lessons
      FROM enrollments e
      JOIN users u ON u.id = e.user_id
-     JOIN lessons l ON l.course_id = e.course_id
+     JOIN lessons l ON l.course_id = e.course_id AND l.type = 'lecture'
      LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.user_id = u.id
      WHERE e.course_id = $1 AND e.status = 'active'
      GROUP BY u.id, u.full_name

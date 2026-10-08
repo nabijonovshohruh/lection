@@ -224,6 +224,12 @@ select:focus {
   border-radius: var(--radius-lg);
 }
 
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .form input {
   background: var(--bg);
 }

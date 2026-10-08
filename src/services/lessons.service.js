@@ -23,10 +23,20 @@ async function createLesson({
   homework_text,
   order_index,
   is_published,
+  type,
+  scheduled_date,
+  mentor_name,
+  topics,
+  start_time,
+  end_time,
 }) {
   const { rows } = await pool.query(
-    `INSERT INTO lessons (course_id, title, description, video_url, resource_url, duration_seconds, homework_text, order_index, is_published)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `INSERT INTO lessons (
+       course_id, title, description, video_url, resource_url, duration_seconds,
+       homework_text, order_index, is_published, type, scheduled_date,
+       mentor_name, topics, start_time, end_time
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
      RETURNING *`,
     [
       course_id,
@@ -38,6 +48,12 @@ async function createLesson({
       homework_text || null,
       order_index,
       Boolean(is_published),
+      type || 'lecture',
+      scheduled_date || null,
+      mentor_name || null,
+      topics || null,
+      start_time || null,
+      end_time || null,
     ]
   );
   return rows[0];
@@ -53,17 +69,26 @@ async function updateLesson(id, fields) {
     'homework_text',
     'order_index',
     'is_published',
+    'type',
+    'scheduled_date',
+    'mentor_name',
+    'topics',
+    'start_time',
+    'end_time',
   ];
   const sets = [];
   const values = [];
   let i = 1;
 
   for (const key of allowed) {
-    if (fields[key] !== undefined) {
-      sets.push(`${key} = $${i}`);
-      values.push(fields[key]);
-      i += 1;
-    }
+    if (fields[key] === undefined) continue;
+
+    // scheduled_date DATE ustuni — "" Postgres uchun yaroqsiz, NULL'ga aylantiramiz
+    const value = key === 'scheduled_date' && fields[key] === '' ? null : fields[key];
+
+    sets.push(`${key} = $${i}`);
+    values.push(value);
+    i += 1;
   }
 
   if (sets.length === 0) return getLessonById(id);

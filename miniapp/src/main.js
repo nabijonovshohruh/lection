@@ -125,6 +125,18 @@ function adminNavBar(active) {
   `;
 }
 
+const LESSON_TYPE_LABELS = { lecture: 'Leksiya', seminar: 'Seminar', review: 'Takrorlash' };
+const LESSON_TYPE_ICONS = { lecture: '🎥', seminar: '💬', review: '🔁' };
+
+// Postgres DATE ustuni JSON orqali "2026-10-08T00:00:00.000Z" shaklida keladi —
+// shuni qisqa, o'qish uchun qulay formatga o'giradi.
+function formatScheduledDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit' });
+}
+
 // YouTube havolalari IFrame Player API orqali (progress/anti-skip kuzatuvi bilan),
 // Vimeo oddiy <iframe> orqali (kuzatuvsiz), boshqa (fayl/Telegram) havolalar
 // native <video> orqali (timeupdate/seeking asosida kuzatuv bilan) ko'rsatiladi.
@@ -292,12 +304,24 @@ async function renderLessons(courseId) {
       ${
         lessons
           .map((l) => {
+            const icon = LESSON_TYPE_ICONS[l.type] || LESSON_TYPE_ICONS.lecture;
+            const dateLabel = formatScheduledDate(l.scheduled_date);
+
+            if (l.type === 'seminar' || l.type === 'review') {
+              const typeLabel = LESSON_TYPE_LABELS[l.type];
+              const timeLabel = l.start_time ? ` · ${l.start_time}${l.end_time ? '–' + l.end_time : ''}` : '';
+              return `<div class="card" data-id="${l.id}">
+                <strong>${l.order_index}. ${icon} ${l.title}</strong>
+                <span class="badge">${typeLabel}${dateLabel ? ' · ' + dateLabel : ''}${timeLabel}</span>
+              </div>`;
+            }
+
             const p = progressByLesson.get(String(l.id));
             const percent = p ? Number(p.watch_percent).toFixed(0) : 0;
             return `<div class="card" data-id="${l.id}">
-              <strong>${l.order_index}. ${l.title}</strong>
+              <strong>${l.order_index}. ${icon} ${l.title}</strong>
               <div class="progress-bar"><div class="progress-fill" style="width:${percent}%"></div></div>
-              <span class="badge">${percent}%${p?.is_completed ? ' ✅' : ''}</span>
+              <span class="badge">${percent}%${p?.is_completed ? ' ✅' : ''}${dateLabel ? ' · ' + dateLabel : ''}</span>
             </div>`;
           })
           .join('') || '<p>Darslar topilmadi</p>'
@@ -323,12 +347,75 @@ function renderHomeworkStatus(submission) {
   return `<p class="badge">${labels[submission.status]}</p>${comment}`;
 }
 
+function renderHomeworkSection(homeworkText, submission) {
+  if (!homeworkText) return '';
+  return `<h3>Topshiriq</h3>
+     <p>${homeworkText}</p>
+     <div id="homeworkSection">
+       ${renderHomeworkStatus(submission)}
+       <textarea id="homeworkInput" rows="4" placeholder="Javobingizni yozing..." style="width:100%;box-sizing:border-box">${
+         submission?.content || ''
+       }</textarea>
+       <button id="homeworkSubmitBtn" class="link-btn">Topshirish</button>
+     </div>`;
+}
+
+function wireHomeworkForm(lessonId) {
+  const homeworkBtn = document.getElementById('homeworkSubmitBtn');
+  if (!homeworkBtn) return;
+
+  homeworkBtn.addEventListener('click', async () => {
+    const content = document.getElementById('homeworkInput').value.trim();
+    if (!content) return;
+
+    await apiRequest(`/homework/lesson/${lessonId}`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+    renderLesson(lessonId);
+  });
+}
+
+// SEMINAR/REVIEW darslarida video yo'q — kuzatiladigan progress ham yo'q,
+// shuning uchun bu turlar uchun alohida, maxsus kartochka ko'rsatiladi.
+function renderSeminarOrReviewLesson(lesson, submission) {
+  const isSeminar = lesson.type === 'seminar';
+  const icon = LESSON_TYPE_ICONS[lesson.type];
+  const dateLabel = formatScheduledDate(lesson.scheduled_date);
+  const timeLabel = lesson.start_time ? `${lesson.start_time}${lesson.end_time ? ' – ' + lesson.end_time : ''}` : '';
+
+  app.innerHTML = `
+    <button id="backBtn" class="link-btn">&larr; Darslar</button>
+    <h2>${icon} ${lesson.title}</h2>
+    <div class="card">
+      <strong>${isSeminar ? 'Seminar darsi' : 'Takrorlash kuni'}</strong>
+      ${dateLabel || timeLabel ? `<span class="badge">${[dateLabel, timeLabel].filter(Boolean).join(' · ')}</span>` : ''}
+      ${isSeminar && lesson.mentor_name ? `<p>Mentor: <strong>${lesson.mentor_name}</strong></p>` : ''}
+      ${isSeminar && lesson.topics ? `<p>Mavzular: ${lesson.topics}</p>` : ''}
+      ${lesson.description ? `<p>${lesson.description}</p>` : ''}
+    </div>
+    ${lesson.resource_url ? `<p><a href="${lesson.resource_url}" target="_blank" rel="noopener">Qo'shimcha material (PDF/resurs)</a></p>` : ''}
+    ${renderHomeworkSection(lesson.homework_text, submission)}
+  `;
+
+  document
+    .getElementById('backBtn')
+    .addEventListener('click', () => navTo(`#course/${lesson.course_id}`));
+
+  wireHomeworkForm(lesson.id);
+}
+
 async function renderLesson(lessonId) {
-  const [lesson, progress, submission] = await Promise.all([
-    apiRequest(`/lessons/${lessonId}`),
-    apiRequest(`/progress/lesson/${lessonId}`),
+  const lesson = await apiRequest(`/lessons/${lessonId}`);
+
+  const [progress, submission] = await Promise.all([
+    lesson.type === 'lecture' ? apiRequest(`/progress/lesson/${lessonId}`) : Promise.resolve(null),
     apiRequest(`/homework/lesson/${lessonId}/mine`).catch(() => null),
   ]);
+
+  if (lesson.type !== 'lecture') {
+    return renderSeminarOrReviewLesson(lesson, submission);
+  }
 
   const embed = getVideoEmbed(lesson.video_url);
 
@@ -345,38 +432,14 @@ async function renderLesson(lessonId) {
     }
     <p>${lesson.description || ''}</p>
     ${lesson.resource_url ? `<p><a href="${lesson.resource_url}" target="_blank" rel="noopener">Qo'shimcha material (PDF/resurs)</a></p>` : ''}
-    ${
-      lesson.homework_text
-        ? `<h3>Topshiriq</h3>
-           <p>${lesson.homework_text}</p>
-           <div id="homeworkSection">
-             ${renderHomeworkStatus(submission)}
-             <textarea id="homeworkInput" rows="4" placeholder="Javobingizni yozing..." style="width:100%;box-sizing:border-box">${
-               submission?.content || ''
-             }</textarea>
-             <button id="homeworkSubmitBtn" class="link-btn">Topshirish</button>
-           </div>`
-        : ''
-    }
+    ${renderHomeworkSection(lesson.homework_text, submission)}
   `;
 
   document
     .getElementById('backBtn')
     .addEventListener('click', () => navTo(`#course/${lesson.course_id}`));
 
-  const homeworkBtn = document.getElementById('homeworkSubmitBtn');
-  if (homeworkBtn) {
-    homeworkBtn.addEventListener('click', async () => {
-      const content = document.getElementById('homeworkInput').value.trim();
-      if (!content) return;
-
-      await apiRequest(`/homework/lesson/${lessonId}`, {
-        method: 'POST',
-        body: JSON.stringify({ content }),
-      });
-      renderLesson(lessonId);
-    });
-  }
+  wireHomeworkForm(lessonId);
 
   if (embed?.type === 'youtube') {
     setupYouTubePlayer(embed.videoId, lessonId, lesson, progress);
@@ -516,13 +579,14 @@ async function renderAdminCourseDetail(courseId) {
     <div class="list">
       ${
         lessons
-          .map(
-            (l) =>
-              `<div class="card" data-id="${l.id}">
-                <strong>${l.order_index}. ${l.title}</strong>
-                <span class="badge">${l.is_published ? "E'lon qilingan" : 'Qoralama'}</span>
-              </div>`
-          )
+          .map((l) => {
+            const icon = LESSON_TYPE_ICONS[l.type] || LESSON_TYPE_ICONS.lecture;
+            const dateLabel = formatScheduledDate(l.scheduled_date);
+            return `<div class="card" data-id="${l.id}">
+              <strong>${l.order_index}. ${icon} ${l.title}</strong>
+              <span class="badge">${LESSON_TYPE_LABELS[l.type] || LESSON_TYPE_LABELS.lecture} · ${l.is_published ? "e'lon qilingan" : 'qoralama'}${dateLabel ? ' · ' + dateLabel : ''}</span>
+            </div>`;
+          })
           .join('') || "<p>Darslar yo'q</p>"
       }
     </div>
@@ -574,6 +638,7 @@ async function renderAdminLessonForm(courseId, lessonId) {
   const lesson = lessonId ? await apiRequest(`/lessons/${lessonId}`) : null;
   const existingLessons = lesson ? [] : await apiRequest(`/lessons/course/${courseId}`);
   const defaultOrder = lesson ? lesson.order_index : existingLessons.length + 1;
+  const lessonType = lesson?.type || 'lecture';
 
   app.innerHTML = `
     ${adminNavBar('courses')}
@@ -581,10 +646,27 @@ async function renderAdminLessonForm(courseId, lessonId) {
     <h2>${lesson ? 'Darsni tahrirlash' : 'Yangi dars'}</h2>
     <form id="lessonForm" class="form">
       <input type="text" id="lessonTitle" placeholder="Dars nomi" value="${lesson?.title || ''}" required />
-      <textarea id="lessonDescription" placeholder="Tavsif">${lesson?.description || ''}</textarea>
-      <input type="text" id="lessonVideoUrl" placeholder="Video havola (YouTube/Vimeo/fayl)" value="${lesson?.video_url || ''}" />
-      <input type="text" id="lessonResourceUrl" placeholder="Material havola (PDF/resurs)" value="${lesson?.resource_url || ''}" />
-      <input type="number" id="lessonDuration" placeholder="Davomiyligi (daqiqa)" value="${lesson ? Math.round((lesson.duration_seconds || 0) / 60) : ''}" />
+      <select id="lessonType">
+        ${Object.entries(LESSON_TYPE_LABELS)
+          .map(([value, label]) => `<option value="${value}" ${value === lessonType ? 'selected' : ''}>${label}</option>`)
+          .join('')}
+      </select>
+      <label>Sana<input type="date" id="lessonScheduledDate" value="${lesson?.scheduled_date?.slice(0, 10) || ''}" /></label>
+
+      <div id="lectureFields" class="form-group">
+        <textarea id="lessonDescription" placeholder="Tavsif">${lesson?.description || ''}</textarea>
+        <input type="text" id="lessonVideoUrl" placeholder="Video havola (YouTube/Vimeo/fayl)" value="${lesson?.video_url || ''}" />
+        <input type="text" id="lessonResourceUrl" placeholder="Material havola (PDF/resurs)" value="${lesson?.resource_url || ''}" />
+        <input type="number" id="lessonDuration" placeholder="Davomiyligi (daqiqa)" value="${lesson ? Math.round((lesson.duration_seconds || 0) / 60) : ''}" />
+      </div>
+
+      <div id="seminarFields" class="form-group">
+        <input type="text" id="lessonMentorName" placeholder="Seminarni kim o'tkazadi" value="${lesson?.mentor_name || ''}" />
+        <textarea id="lessonTopics" placeholder="Savol-javob qilinadigan mavzular">${lesson?.topics || ''}</textarea>
+        <label>Boshlanish vaqti<input type="text" id="lessonStartTime" placeholder="19:00" value="${lesson?.start_time || ''}" /></label>
+        <label>Tugash vaqti<input type="text" id="lessonEndTime" placeholder="20:30" value="${lesson?.end_time || ''}" /></label>
+      </div>
+
       <textarea id="lessonHomework" placeholder="Topshiriq matni">${lesson?.homework_text || ''}</textarea>
       <input type="number" id="lessonOrder" placeholder="Tartib raqami" value="${defaultOrder}" />
       <label><input type="checkbox" id="lessonPublished" ${lesson?.is_published ? 'checked' : ''}/> E'lon qilingan</label>
@@ -595,14 +677,32 @@ async function renderAdminLessonForm(courseId, lessonId) {
 
   wireAdminNav();
 
+  const typeSelect = document.getElementById('lessonType');
+  const lectureFields = document.getElementById('lectureFields');
+  const seminarFields = document.getElementById('seminarFields');
+
+  const syncFieldVisibility = () => {
+    const isSeminar = typeSelect.value === 'seminar';
+    seminarFields.classList.toggle('hidden', !isSeminar);
+    lectureFields.classList.toggle('hidden', isSeminar);
+  };
+  syncFieldVisibility();
+  typeSelect.addEventListener('change', syncFieldVisibility);
+
   document.getElementById('lessonForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const payload = {
       title: document.getElementById('lessonTitle').value.trim(),
+      type: typeSelect.value,
+      scheduled_date: document.getElementById('lessonScheduledDate').value,
       description: document.getElementById('lessonDescription').value.trim(),
       video_url: document.getElementById('lessonVideoUrl').value.trim(),
       resource_url: document.getElementById('lessonResourceUrl').value.trim(),
       duration_seconds: Number(document.getElementById('lessonDuration').value || 0) * 60,
+      mentor_name: document.getElementById('lessonMentorName').value.trim(),
+      topics: document.getElementById('lessonTopics').value.trim(),
+      start_time: document.getElementById('lessonStartTime').value.trim(),
+      end_time: document.getElementById('lessonEndTime').value.trim(),
       homework_text: document.getElementById('lessonHomework').value.trim(),
       order_index: Number(document.getElementById('lessonOrder').value || defaultOrder),
       is_published: document.getElementById('lessonPublished').checked,
