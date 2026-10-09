@@ -13,6 +13,19 @@ async function listGroupsByCourse(courseId) {
   return rows;
 }
 
+// Talaba profilidan "Guruhga biriktirish" tanlovi uchun — barcha kurslardagi
+// barcha guruhlar, kurs nomi bilan birga (kurs tanlash dropdown'da ajralib turishi uchun).
+async function listAllGroups() {
+  const { rows } = await pool.query(
+    `SELECT g.*, c.name AS course_name,
+       (SELECT COUNT(*) FROM enrollments e WHERE e.group_id = g.id AND e.status = 'active') AS student_count
+     FROM groups g
+     JOIN courses c ON c.id = g.course_id
+     ORDER BY c.name, g.name`
+  );
+  return rows;
+}
+
 async function listGroupsForMentor(mentorId) {
   const { rows } = await pool.query(
     `SELECT g.*, c.name AS course_name,
@@ -107,6 +120,7 @@ async function listGroupMembers(groupId) {
 
 module.exports = {
   listGroupsByCourse,
+  listAllGroups,
   listGroupsForMentor,
   getGroupById,
   createGroup,

@@ -36,6 +36,15 @@ async function main() {
       capacity: 2,
     });
 
+    // O'quvchi profilidan "Guruhga biriktirish" dropdown'i uchun — barcha kurslar
+    // bo'yicha guruhlarni bitta ro'yxatda, kurs nomi bilan qaytaradi
+    const allGroups = await groupsService.listAllGroups();
+    const allGroupsEntry = allGroups.find((g) => g.id === group.id);
+    check(
+      "listAllGroups yaratilgan guruhni kurs nomi bilan birga qaytaradi",
+      allGroupsEntry?.course_name === course.name
+    );
+
     const studentA = await usersService.findOrCreateByTelegramId({
       telegram_id: BASE_TELEGRAM_ID + 1,
       full_name: 'Smoke Test Student A',
@@ -48,9 +57,14 @@ async function main() {
       telegram_id: BASE_TELEGRAM_ID + 3,
       full_name: 'Smoke Test Student C',
     });
-    testUserIds.push(studentA.id, studentB.id, studentC.id);
+    const studentWithUsername = await usersService.findOrCreateByTelegramId({
+      telegram_id: BASE_TELEGRAM_ID + 4,
+      full_name: 'Smoke Test Student D',
+      username: `smoketestuser${RUN_ID}`,
+    });
+    testUserIds.push(studentA.id, studentB.id, studentC.id, studentWithUsername.id);
 
-    // 0a) Admin panelidagi "O'quvchi qo'shish" qidiruvi — Ism-familiya bo'yicha qidirish
+    // 0a) Admin panelidagi "O'quvchi qo'shish" qidiruvi — Ism-familiya yoki username bo'yicha
     const searchMiss = await usersService.listUsers({ role: 'student', search: `Student A ${RUN_ID}` });
     check("Ism-familiya bo'yicha qidiruv mos kelmagan so'rovda hech narsa topmaydi", searchMiss.length === 0);
 
@@ -58,6 +72,12 @@ async function main() {
     check(
       "Ism-familiya bo'yicha qidiruv to'g'ri foydalanuvchini topadi",
       searchHit.some((u) => u.id === studentA.id)
+    );
+
+    const usernameHit = await usersService.listUsers({ search: `smoketestuser${RUN_ID}` });
+    check(
+      "Username bo'yicha qidiruv to'g'ri foydalanuvchini topadi",
+      usernameHit.some((u) => u.id === studentWithUsername.id)
     );
 
     // 0) ADMIN_TELEGRAM_ID orqali admin rolini avtomatik aniqlash (self-heal)

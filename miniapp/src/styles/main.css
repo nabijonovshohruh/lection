@@ -318,7 +318,8 @@ select:focus {
   font-size: 17px;
 }
 
-.modal-box > input {
+.modal-box > input,
+.modal-box > select {
   margin-bottom: 12px;
 }
 

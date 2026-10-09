@@ -792,12 +792,18 @@ async function renderAdminCourseStudents(courseId) {
   });
 }
 
-async function renderAdminStudents() {
-  const students = await apiRequest('/users?role=student');
+// Qidiruv bo'sh bo'lsa — faqat studentlar (sahifa nomiga mos standart ko'rinish);
+// qidiruv yozilsa — barcha rollar bo'yicha (shu jumladan avval admin qilingan
+// seminaristlarni ham topib, kerak bo'lsa qayta studentga qaytarish uchun).
+async function renderAdminStudents(query) {
+  const students = query
+    ? await apiRequest(`/users?search=${encodeURIComponent(query)}`)
+    : await apiRequest('/users?role=student');
 
   app.innerHTML = `
     ${adminNavBar('students')}
     <h2>O'quvchilar</h2>
+    <input type="text" id="studentsSearchInput" placeholder="Ism-familiya yoki username bo'yicha qidirish..." value="${query || ''}" autocomplete="off" />
     <div class="list">
       ${
         students
@@ -805,7 +811,7 @@ async function renderAdminStudents() {
             (s) =>
               `<div class="card" data-id="${s.id}">
                 <strong>${s.full_name}</strong>
-                <span class="badge">${s.username ? '@' + s.username : s.telegram_id}</span>
+                <span class="badge">${s.username ? '@' + s.username : s.telegram_id}${s.role !== 'student' ? ' · ' + s.role : ''}</span>
               </div>`
           )
           .join('') || "<p>O'quvchilar topilmadi</p>"
@@ -817,16 +823,69 @@ async function renderAdminStudents() {
   app.querySelectorAll('.card').forEach((el) => {
     el.addEventListener('click', () => navTo(`#admin/student/${el.dataset.id}`));
   });
+
+  const searchInput = document.getElementById('studentsSearchInput');
+  let debounceTimer = null;
+  searchInput.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => renderAdminStudents(searchInput.value.trim()), 300);
+  });
+  searchInput.focus();
+  searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+}
+
+function openAssignGroupModal(studentId, onAssigned) {
+  apiRequest('/groups').then((groups) => {
+    openModal(`
+      <div class="modal-header">
+        <h3>Guruhga biriktirish</h3>
+        <button id="modalCloseBtn" class="link-btn" type="button">&times;</button>
+      </div>
+      <select id="groupSelect">
+        ${
+          groups
+            .map((g) => `<option value="${g.id}">${g.course_name} — ${g.name} (${g.student_count}/${g.capacity})</option>`)
+            .join('') || '<option disabled>Guruhlar topilmadi</option>'
+        }
+      </select>
+      <button id="assignGroupBtn" class="btn">Saqlash</button>
+    `);
+
+    document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+
+    document.getElementById('assignGroupBtn').addEventListener('click', async () => {
+      const groupId = document.getElementById('groupSelect').value;
+      if (!groupId) return;
+
+      try {
+        await apiRequest(`/groups/${groupId}/students`, {
+          method: 'POST',
+          body: JSON.stringify({ user_id: Number(studentId) }),
+        });
+        closeModal();
+        onAssigned?.();
+      } catch (err) {
+        notify(err.message);
+      }
+    });
+  });
 }
 
 async function renderAdminStudentDetail(userId) {
   const student = await apiRequest(`/users/${userId}`);
+  const isAdmin = student.role === 'admin';
 
   app.innerHTML = `
     ${adminNavBar('students')}
     <button class="link-btn" data-nav="admin/students">&larr; O'quvchilar</button>
     <h2>${student.full_name}</h2>
-    <p class="badge">${student.username ? '@' + student.username : student.telegram_id} · ${student.phone || "telefon yo'q"}</p>
+    <p class="badge">${student.username ? '@' + student.username : student.telegram_id} · ${student.phone || "telefon yo'q"} · rol: ${student.role}</p>
+
+    <button id="assignGroupBtn" class="btn">Guruhga biriktirish</button>
+    <button id="toggleRoleBtn" class="btn ${isAdmin ? 'btn-danger' : ''}">
+      ${isAdmin ? "Studentga qaytarish" : 'Admin qilish'}
+    </button>
+
     <h3>Kurslar</h3>
     <div class="list">
       ${
@@ -844,6 +903,23 @@ async function renderAdminStudentDetail(userId) {
   `;
 
   wireAdminNav();
+
+  document
+    .getElementById('assignGroupBtn')
+    .addEventListener('click', () => openAssignGroupModal(userId, () => renderAdminStudentDetail(userId)));
+
+  document.getElementById('toggleRoleBtn').addEventListener('click', async () => {
+    const nextRole = isAdmin ? 'student' : 'admin';
+    const ok = await confirmAction(
+      isAdmin
+        ? `${student.full_name}ni studentga qaytarmoqchimisiz?`
+        : `${student.full_name}ga admin huquqini bermoqchimisiz?`
+    );
+    if (!ok) return;
+
+    await apiRequest(`/users/${userId}`, { method: 'PUT', body: JSON.stringify({ role: nextRole }) });
+    renderAdminStudentDetail(userId);
+  });
 }
 
 function routeAdmin(parts) {

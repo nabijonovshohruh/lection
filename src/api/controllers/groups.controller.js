@@ -10,6 +10,15 @@ async function listByCourse(req, res, next) {
   }
 }
 
+async function listAll(req, res, next) {
+  try {
+    const groups = await groupsService.listAllGroups();
+    res.json(groups);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getById(req, res, next) {
   try {
     const group = await groupsService.getGroupById(req.params.id);
@@ -81,4 +90,4 @@ async function addStudent(req, res, next) {
   }
 }
 
-module.exports = { listByCourse, getById, create, update, remove, assignMentor, addStudent };
+module.exports = { listByCourse, listAll, getById, create, update, remove, assignMentor, addStudent };

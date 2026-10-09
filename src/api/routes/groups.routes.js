@@ -14,6 +14,7 @@ const updateRules = { name: { type: 'string' }, capacity: { type: 'number' } };
 const assignMentorRules = { mentor_id: { required: true, type: 'number' } };
 const addStudentRules = { user_id: { required: true, type: 'number' } };
 
+router.get('/', requireRole('admin'), controller.listAll);
 router.get('/course/:courseId', controller.listByCourse);
 router.get('/:id', controller.getById);
 router.post('/', requireRole('admin'), validate(createRules), controller.create);

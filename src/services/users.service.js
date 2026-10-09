@@ -83,7 +83,7 @@ async function listUsers({ role, search } = {}) {
 
   if (search) {
     params.push(`%${search}%`);
-    conditions.push(`full_name ILIKE $${params.length}`);
+    conditions.push(`(full_name ILIKE $${params.length} OR username ILIKE $${params.length})`);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
