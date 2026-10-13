@@ -232,6 +232,19 @@ async function setupYouTubePlayer(videoId, lessonId, lesson, progress) {
     },
     events: {
       onReady(event) {
+        // Pleer o'zi yaratgan <iframe>'ga (videoId/playerVars'dan to'g'ri
+        // src bilan) mobil WebView'lar uchun to'liq "allow" ruxsatini
+        // qo'shamiz — buni oldindan tayyorlangan <iframe>'ga berib bo'lmaydi,
+        // chunki API mavjud iframe'ga src'ni o'zi yozmaydi.
+        const iframe = event.target.getIframe();
+        if (iframe) {
+          iframe.setAttribute(
+            'allow',
+            'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; playsinline'
+          );
+          iframe.setAttribute('allowfullscreen', '');
+        }
+
         if (maxWatched > 0) {
           event.target.seekTo(maxWatched, true);
         }
@@ -430,13 +443,7 @@ async function renderLesson(lessonId) {
     <h2>${lesson.title}</h2>
     ${
       embed?.type === 'youtube'
-        ? `<iframe
-             id="ytPlayer"
-             title="${lesson.title}"
-             style="width:100%;height:220px;border:0"
-             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; playsinline"
-             allowfullscreen
-           ></iframe>`
+        ? `<div id="ytPlayer"></div>`
         : embed?.type === 'iframe'
           ? `<iframe width="100%" height="220" src="${embed.src}" frameborder="0" allowfullscreen></iframe>
              <p class="badge">Bu video uchun ko'rish foizi avtomatik kuzatilmaydi</p>`
