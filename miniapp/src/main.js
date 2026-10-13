@@ -223,7 +223,13 @@ async function setupYouTubePlayer(videoId, lessonId, lesson, progress) {
 
   new YT.Player('ytPlayer', {
     videoId,
-    playerVars: { rel: 0, modestbranding: 1, playsinline: 1 },
+    playerVars: {
+      enablejsapi: 1,
+      playsinline: 1, // Mobil Telegram (iOS/Android) uchun shart
+      origin: window.location.origin,
+      rel: 0,
+      modestbranding: 1,
+    },
     events: {
       onReady(event) {
         if (maxWatched > 0) {
@@ -424,7 +430,13 @@ async function renderLesson(lessonId) {
     <h2>${lesson.title}</h2>
     ${
       embed?.type === 'youtube'
-        ? `<div id="ytPlayer"></div>`
+        ? `<iframe
+             id="ytPlayer"
+             title="${lesson.title}"
+             style="width:100%;height:220px;border:0"
+             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; playsinline"
+             allowfullscreen
+           ></iframe>`
         : embed?.type === 'iframe'
           ? `<iframe width="100%" height="220" src="${embed.src}" frameborder="0" allowfullscreen></iframe>
              <p class="badge">Bu video uchun ko'rish foizi avtomatik kuzatilmaydi</p>`
