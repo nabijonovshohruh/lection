@@ -1,5 +1,6 @@
 const lessonsService = require('../../services/lessons.service');
 const coursesService = require('../../services/courses.service');
+const progressService = require('../../services/progress.service');
 
 async function listByCourse(req, res, next) {
   try {
@@ -22,6 +23,13 @@ async function getById(req, res, next) {
 
     const hasAccess = await coursesService.userHasCourseAccess(req.user, lesson.course_id);
     if (!hasAccess) return res.status(403).json({ message: 'Forbidden' });
+
+    if (req.user.role === 'student') {
+      const unlocked = await progressService.isLessonUnlockedForUser(req.user.id, lesson);
+      if (!unlocked) {
+        return res.status(403).json({ message: "Bu dars hali qulflangan — avvalgi darsni tugating" });
+      }
+    }
 
     res.json(lesson);
   } catch (err) {

@@ -55,7 +55,7 @@ async function updateWatchPosition(userId, lessonId, positionSeconds) {
 
 async function listProgressByCourse(userId, courseId) {
   const { rows } = await pool.query(
-    `SELECT l.id AS lesson_id, l.title, l.order_index, l.duration_seconds,
+    `SELECT l.id AS lesson_id, l.title, l.order_index, l.duration_seconds, l.type,
             COALESCE(lp.watch_percent, 0) AS watch_percent,
             COALESCE(lp.is_completed, FALSE) AS is_completed
      FROM lessons l
@@ -65,6 +65,32 @@ async function listProgressByCourse(userId, courseId) {
     [userId, courseId]
   );
   return rows;
+}
+
+// Ketma-ket qulflash: SEMINAR/REVIEW darslari hech qachon qulflanmaydi
+// (ularda tomosha qilib "tugatish" degan narsa yo'q). LECTURE darslari esa
+// faqat o'zidan OLDINGI eng yaqin LECTURE tugatilgach ochiladi. Birinchi
+// LECTURE har doim ochiq. `rows` l.order_index bo'yicha saralangan bo'lishi shart.
+function computeLessonUnlockMap(rows) {
+  const unlockMap = new Map();
+  let previousLectureCompleted = true;
+
+  for (const row of rows) {
+    const unlocked = row.type !== 'lecture' || previousLectureCompleted;
+    unlockMap.set(row.lesson_id, unlocked);
+
+    if (row.type === 'lecture') {
+      previousLectureCompleted = row.is_completed;
+    }
+  }
+
+  return unlockMap;
+}
+
+async function isLessonUnlockedForUser(userId, lesson) {
+  const rows = await listProgressByCourse(userId, lesson.course_id);
+  const unlockMap = computeLessonUnlockMap(rows);
+  return unlockMap.get(lesson.id) ?? true;
 }
 
 // Faqat LECTURE darslari video orqali "bajarildi" deb belgilanishi mumkin —
@@ -92,4 +118,6 @@ module.exports = {
   updateWatchPosition,
   listProgressByCourse,
   listCourseProgressForMentor,
+  computeLessonUnlockMap,
+  isLessonUnlockedForUser,
 };

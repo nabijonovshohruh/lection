@@ -53,6 +53,49 @@ function closeModal() {
   document.querySelector('.modal-overlay')?.remove();
 }
 
+// Talaba uchun pastki tab-navigatsiya — #app'dan tashqarida alohida DOM
+// elementida yashaydi (index.html), shuning uchun app.innerHTML qayta
+// yozilganda ham yo'qolmaydi, faqat aktiv tab belgisi yangilanadi.
+function showBottomNav(active) {
+  const nav = document.getElementById('studentBottomNav');
+  if (!nav) return;
+
+  nav.classList.remove('hidden');
+  nav.innerHTML = `
+    <button class="bottom-nav-item ${active === 'bosh' ? 'active' : ''}" data-tab="bosh">
+      <span class="icon">🏠</span>Bosh sahifa
+    </button>
+    <button class="bottom-nav-item ${active === 'darslar' ? 'active' : ''}" data-tab="darslar">
+      <span class="icon">📚</span>Darslar
+    </button>
+    <button class="bottom-nav-item ${active === 'profil' ? 'active' : ''}" data-tab="profil">
+      <span class="icon">👤</span>Profil
+    </button>
+  `;
+
+  nav.querySelector('[data-tab="bosh"]').addEventListener('click', () => navTo('#courses'));
+  nav.querySelector('[data-tab="darslar"]').addEventListener('click', () => goToDarslarTab());
+  nav.querySelector('[data-tab="profil"]').addEventListener('click', () => navTo('#profile'));
+}
+
+function hideBottomNav() {
+  document.getElementById('studentBottomNav')?.classList.add('hidden');
+}
+
+// "Darslar" tab'i: agar talaba aniq bitta faol kursga yozilgan bo'lsa,
+// to'g'ridan-to'g'ri o'sha kursning dars yo'liga o'tkaziladi; aks holda
+// (bir nechta yoki hech qaysi bo'lmasa) kurslar ro'yxatiga yo'naltiriladi.
+async function goToDarslarTab() {
+  const user = await ensureUser();
+  const active = (user.enrollments || []).filter((e) => e.status === 'active');
+
+  if (active.length === 1) {
+    navTo(`#course/${active[0].course_id}`);
+  } else {
+    navTo('#courses');
+  }
+}
+
 // Kurs ichida talaba Ism-familiyasi bo'yicha qidirib, bir bosishda
 // tanlangan kursga biriktirish uchun qidiruv modali.
 function openAddStudentModal(courseId, onAdded) {
@@ -299,13 +342,31 @@ async function renderCourses() {
           .join('') || '<p>Kurslar topilmadi</p>'
       }
     </div>
-    <button id="warningsBtn" class="link-btn">Ogohlantirishlarim</button>
   `;
 
   app.querySelectorAll('.card').forEach((el) => {
     el.addEventListener('click', () => navTo(`#course/${el.dataset.id}`));
   });
-  document.getElementById('warningsBtn').addEventListener('click', () => navTo('#warnings'));
+}
+
+// Ketma-ket qulflash (frontend tomoni — backend ham mustaqil ravishda xuddi
+// shu mantiqni tekshiradi, progress.service.js'dagi computeLessonUnlockMap
+// bilan bir xil): SEMINAR/REVIEW hech qachon qulflanmaydi, LECTURE esa
+// faqat o'zidan oldingi eng yaqin LECTURE tugatilgach ochiladi.
+function computeUnlockedMap(lessons, progressByLesson) {
+  const unlockMap = new Map();
+  let previousLectureCompleted = true;
+
+  for (const l of lessons) {
+    const unlocked = l.type !== 'lecture' || previousLectureCompleted;
+    unlockMap.set(l.id, unlocked);
+
+    if (l.type === 'lecture') {
+      previousLectureCompleted = Boolean(progressByLesson.get(String(l.id))?.is_completed);
+    }
+  }
+
+  return unlockMap;
 }
 
 async function renderLessons(courseId) {
@@ -315,32 +376,32 @@ async function renderLessons(courseId) {
   ]);
 
   const progressByLesson = new Map(progress.map((p) => [String(p.lesson_id), p]));
+  const unlockedMap = computeUnlockedMap(lessons, progressByLesson);
 
   app.innerHTML = `
     <button id="backBtn" class="link-btn">&larr; Kurslar</button>
-    <h2>Darslar</h2>
-    <div class="list">
+    <h2>Dars rejasi</h2>
+    <div class="lesson-path">
       ${
         lessons
           .map((l) => {
-            const icon = LESSON_TYPE_ICONS[l.type] || LESSON_TYPE_ICONS.lecture;
-            const dateLabel = formatScheduledDate(l.scheduled_date);
+            const p = progressByLesson.get(String(l.id));
+            const unlocked = unlockedMap.get(l.id);
+            const completed = Boolean(p?.is_completed);
 
-            if (l.type === 'seminar' || l.type === 'review') {
-              const typeLabel = LESSON_TYPE_LABELS[l.type];
-              const timeLabel = l.start_time ? ` · ${l.start_time}${l.end_time ? '–' + l.end_time : ''}` : '';
-              return `<div class="card" data-id="${l.id}">
-                <strong>${l.order_index}. ${icon} ${l.title}</strong>
-                <span class="badge">${typeLabel}${dateLabel ? ' · ' + dateLabel : ''}${timeLabel}</span>
-              </div>`;
+            let stateClass = 'unlocked';
+            let bubbleIcon = LESSON_TYPE_ICONS[l.type] || LESSON_TYPE_ICONS.lecture;
+            if (!unlocked) {
+              stateClass = 'locked';
+              bubbleIcon = '🔒';
+            } else if (completed) {
+              stateClass = 'completed';
+              bubbleIcon = '✅';
             }
 
-            const p = progressByLesson.get(String(l.id));
-            const percent = p ? Number(p.watch_percent).toFixed(0) : 0;
-            return `<div class="card" data-id="${l.id}">
-              <strong>${l.order_index}. ${icon} ${l.title}</strong>
-              <div class="progress-bar"><div class="progress-fill" style="width:${percent}%"></div></div>
-              <span class="badge">${percent}%${p?.is_completed ? ' ✅' : ''}${dateLabel ? ' · ' + dateLabel : ''}</span>
+            return `<div class="lesson-node ${stateClass}" data-id="${l.id}" data-unlocked="${unlocked}">
+              <div class="lesson-bubble">${bubbleIcon}</div>
+              <span class="lesson-node-label">${l.order_index}. ${l.title}</span>
             </div>`;
           })
           .join('') || '<p>Darslar topilmadi</p>'
@@ -349,8 +410,14 @@ async function renderLessons(courseId) {
   `;
 
   document.getElementById('backBtn').addEventListener('click', () => navTo('#courses'));
-  app.querySelectorAll('.card').forEach((el) => {
-    el.addEventListener('click', () => navTo(`#lesson/${el.dataset.id}`));
+  app.querySelectorAll('.lesson-node').forEach((el) => {
+    el.addEventListener('click', () => {
+      if (el.dataset.unlocked === 'true') {
+        navTo(`#lesson/${el.dataset.id}`);
+      } else {
+        notify("Avval oldingi darsni tugating");
+      }
+    });
   });
 }
 
@@ -529,6 +596,47 @@ async function renderWarnings() {
   `;
 
   document.getElementById('backBtn').addEventListener('click', () => navTo('#courses'));
+}
+
+async function renderProfile(user) {
+  const warnings = await apiRequest(`/warnings/user/${user.id}`);
+  const activeEnrollments = (user.enrollments || []).filter((e) => e.status === 'active');
+
+  app.innerHTML = `
+    <h2>Profil</h2>
+    <div class="card">
+      <strong>${user.full_name}</strong>
+      <span class="badge">${user.username ? '@' + user.username : user.telegram_id}</span>
+    </div>
+
+    <h3>Kurslarim</h3>
+    <div class="list">
+      ${
+        activeEnrollments
+          .map(
+            (e) =>
+              `<div class="card" data-course-id="${e.course_id}">
+                <strong>${e.course_name}</strong>
+                <span class="badge">${e.group_name || 'guruhsiz'}</span>
+              </div>`
+          )
+          .join('') || "<p>Hali hech qaysi kursga yozilmagansiz</p>"
+      }
+    </div>
+
+    <h3>Ogohlantirishlarim (${warnings.length}/4)</h3>
+    <div class="list">
+      ${
+        warnings
+          .map((w) => `<div class="card"><strong>${w.warning_number}/4</strong><p>${w.reason}</p></div>`)
+          .join('') || "<p>Ogohlantirishlar yo'q</p>"
+      }
+    </div>
+  `;
+
+  app.querySelectorAll('[data-course-id]').forEach((el) => {
+    el.addEventListener('click', () => navTo(`#course/${el.dataset.courseId}`));
+  });
 }
 
 /* ---------------- Admin sahifalari ---------------- */
@@ -994,17 +1102,34 @@ async function router() {
     }
 
     if (user.role === 'admin') {
+      hideBottomNav();
       return routeAdmin(parts.slice(1));
     }
 
     const [page, id] = parts;
-    if (page === 'course' && id) return renderLessons(id);
-    if (page === 'lesson' && id) return renderLesson(id);
-    if (page === 'warnings') return renderWarnings();
-    return renderCourses();
+
+    if (page === 'profile') {
+      await renderProfile(user);
+    } else if (page === 'course' && id) {
+      await renderLessons(id);
+    } else if (page === 'lesson' && id) {
+      await renderLesson(id);
+    } else if (page === 'warnings') {
+      await renderWarnings();
+    } else {
+      await renderCourses();
+    }
+
+    showBottomNav(resolveActiveTab(page));
   } catch (err) {
     app.innerHTML = `<p>Xatolik: ${err.message}</p>`;
   }
+}
+
+function resolveActiveTab(page) {
+  if (page === 'profile' || page === 'warnings') return 'profil';
+  if (page === 'course' || page === 'lesson') return 'darslar';
+  return 'bosh';
 }
 
 window.addEventListener('hashchange', router);

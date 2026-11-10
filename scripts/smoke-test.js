@@ -287,6 +287,35 @@ async function main() {
       "SEMINAR darsi umumiy o'zlashtirish hisobiga (total_lessons) qo'shilmaydi",
       Number(studentBProgress?.total_lessons) === 1 && Number(studentBProgress?.completed_lessons) === 1
     );
+
+    // 7) Ketma-ket qulflash: lecture(1) -> seminar(2, hech qachon qulflanmaydi) -> lecture(3)
+    const lecture2 = await lessonsService.createLesson({
+      course_id: course.id,
+      title: 'Smoke Test Lecture 2',
+      type: 'lecture',
+      video_url: 'https://example.com/video2.mp4',
+      duration_seconds: 100,
+      order_index: 3,
+      is_published: true,
+    });
+
+    const seminarUnlockedForC = await progressService.isLessonUnlockedForUser(studentC.id, seminar);
+    check(
+      "SEMINAR darsi hech qachon qulflanmaydi (oldingi lecture tugatilmagan bo'lsa ham)",
+      seminarUnlockedForC === true
+    );
+
+    const lecture2UnlockedForC = await progressService.isLessonUnlockedForUser(studentC.id, lecture2);
+    check(
+      "1-lecture tugatilmagan talaba uchun 2-lecture qulflangan",
+      lecture2UnlockedForC === false
+    );
+
+    const lecture2UnlockedForB = await progressService.isLessonUnlockedForUser(studentB.id, lecture2);
+    check(
+      '1-lecture (100%) tugatgan talaba uchun keyingi lecture ochiq (seminar oralig\'iga qaramasdan)',
+      lecture2UnlockedForB === true
+    );
   } finally {
     if (course) await coursesService.deleteCourse(course.id);
     if (testUserIds.length) {
