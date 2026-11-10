@@ -33,8 +33,15 @@
   box-sizing: border-box;
 }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 15px;
   line-height: 1.45;
@@ -47,6 +54,22 @@ body {
   max-width: 720px;
   margin: 0 auto;
   padding: 16px;
+}
+
+/* Har qanday ko'milgan media (video/iframe/rasm) konteynerdan kengroq
+   bo'lib, gorizontal scroll'ga sabab bo'lmasin — bu YouTube pleer o'zining
+   standart 640px kengligini saqlab qolsa ham, mobil ekranga moslashishini
+   kafolatlaydi. */
+iframe,
+video,
+img {
+  max-width: 100%;
+}
+
+#ytPlayer {
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 16 / 9;
 }
 
 h2 {

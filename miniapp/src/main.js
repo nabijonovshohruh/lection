@@ -451,7 +451,17 @@ async function renderLesson(lessonId) {
     }
     <p>${lesson.description || ''}</p>
     ${lesson.resource_url ? `<p><a href="${lesson.resource_url}" target="_blank" rel="noopener">Qo'shimcha material (PDF/resurs)</a></p>` : ''}
-    ${renderHomeworkSection(lesson.homework_text, submission)}
+    ${
+      // Uy vazifasi faqat video to'liq ko'rilgach (is_completed) ko'rinadi.
+      // Vimeo bundan mustasno — unda hech qachon progress kuzatilmaydi
+      // (kuzatuv faqat YouTube/fayl-video uchun ishlaydi), shuning uchun
+      // uni gate qilsak, uy vazifasi abadiy ochilmay qolardi.
+      embed?.type === 'iframe' || progress?.is_completed
+        ? renderHomeworkSection(lesson.homework_text, submission)
+        : lesson.homework_text
+          ? '<p class="badge">🔒 Uy vazifasi darsni to\'liq ko\'rgandan keyin ochiladi</p>'
+          : ''
+    }
   `;
 
   document
@@ -495,7 +505,10 @@ async function renderLesson(lessonId) {
       }
     });
 
-    video.addEventListener('ended', () => sendProgress(video.duration));
+    video.addEventListener('ended', async () => {
+      await sendProgress(video.duration);
+      renderLesson(lessonId); // uy vazifasi qismini ochish uchun yangi holat bilan qayta chizadi
+    });
   }
 }
 
