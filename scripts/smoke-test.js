@@ -219,6 +219,23 @@ async function main() {
     const finished = await progressService.getOrCreateProgress(studentB.id, lesson.id);
     check("100 soniyagacha ketma-ket ko'rilgach is_completed = true bo'ldi", finished.is_completed === true);
 
+    // Haqiqiy xato: video "tugadi" hodisasi kelganda, agar serverdagi
+    // max_watched_seconds sekin internet tufayli eskirgan bo'lsa, oddiy
+    // hisobot anti-skip tomonidan rad etilib, dars hech qachon tugallanmay
+    // qolardi. ended:true shu holatni oldini olishi kerak.
+    await progressService.updateWatchPosition(studentC.id, lesson.id, 10);
+    let endedBypassWorked = false;
+    try {
+      const result = await progressService.updateWatchPosition(studentC.id, lesson.id, 100, { ended: true });
+      endedBypassWorked = result.is_completed === true && Number(result.watch_percent) === 100;
+    } catch {
+      endedBypassWorked = false;
+    }
+    check(
+      "ended:true bilan keskin sakrash ham rad etilmaydi va darsni to'g'ri tugallaydi",
+      endedBypassWorked
+    );
+
     // 4) Uy vazifasi topshirish va tasdiqlash
     const submission = await homeworkService.submitHomework({
       lesson_id: lesson.id,

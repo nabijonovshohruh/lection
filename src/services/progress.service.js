@@ -20,7 +20,17 @@ async function getOrCreateProgress(userId, lessonId) {
 // Videoni 100% ko'rish nazorati: yangi pozitsiya avvalgi eng ko'p ko'rilgan
 // joydan SEEK_BUFFER_SECONDS'dan ortiq uzoqda bo'lsa, oldinga sakrab o'tkazib
 // yuborish deb hisoblanadi va rad etiladi.
-async function updateWatchPosition(userId, lessonId, positionSeconds) {
+//
+// `ended: true` — pleer (native <video> yoki YouTube) haqiqatan "tugadi"
+// hodisasini yuborganda shu flag bilan chaqiriladi. Bu holatda anti-skip
+// tekshiruvi O'TKAZIB YUBORILADI: video haqiqatan oxirigacha o'ynagani
+// pleerning o'zidan tasdiqlangan, bu "oldinga sakrash" emas. Buni
+// tekshirmasdan qoldirish MUHIM edi — aks holda sekin internetda oxirgi
+// "tugadi" so'rovi serverdagi eski max_watched_seconds'ga nisbatan
+// "sakrash" deb xato rad etilib, xato .catch(()=>{}) bilan jim yutilib,
+// dars hech qachon "tugatildi" deb belgilanmay qolardi (keyingi darsni
+// abadiy qulflangan holda qoldirardi).
+async function updateWatchPosition(userId, lessonId, positionSeconds, { ended = false } = {}) {
   const lessonRes = await pool.query('SELECT duration_seconds FROM lessons WHERE id = $1', [lessonId]);
   const lesson = lessonRes.rows[0];
   if (!lesson) throw new Error('Lesson not found');
@@ -28,14 +38,14 @@ async function updateWatchPosition(userId, lessonId, positionSeconds) {
   const progress = await getOrCreateProgress(userId, lessonId);
   const requestedPosition = Math.max(0, Math.floor(positionSeconds));
 
-  if (requestedPosition > progress.max_watched_seconds + SEEK_BUFFER_SECONDS) {
+  if (!ended && requestedPosition > progress.max_watched_seconds + SEEK_BUFFER_SECONDS) {
     throw Object.assign(new Error("Videoni o'tkazib yuborish mumkin emas"), { status: 400 });
   }
 
   const newMax = Math.max(progress.max_watched_seconds, requestedPosition);
   const duration = lesson.duration_seconds || 1;
-  const watchPercent = Math.min(100, (newMax / duration) * 100);
-  const isCompleted = watchPercent >= COMPLETE_THRESHOLD_PERCENT;
+  const watchPercent = ended ? 100 : Math.min(100, (newMax / duration) * 100);
+  const isCompleted = ended || watchPercent >= COMPLETE_THRESHOLD_PERCENT;
 
   const { rows } = await pool.query(
     `UPDATE lesson_progress

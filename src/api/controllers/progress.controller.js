@@ -35,7 +35,8 @@ async function updateWatchPosition(req, res, next) {
     const progress = await progressService.updateWatchPosition(
       req.user.id,
       lesson.id,
-      req.body.position_seconds
+      req.body.position_seconds,
+      { ended: Boolean(req.body.ended) }
     );
     res.json(progress);
   } catch (err) {

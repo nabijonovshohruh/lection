@@ -258,10 +258,10 @@ async function setupYouTubePlayer(videoId, lessonId, lesson, progress) {
   let lastReported = maxWatched;
   let ended = false;
 
-  const sendProgress = (position) =>
+  const sendProgress = (position, options = {}) =>
     apiRequest(`/progress/lesson/${lessonId}`, {
       method: 'POST',
-      body: JSON.stringify({ position_seconds: Math.floor(position) }),
+      body: JSON.stringify({ position_seconds: Math.floor(position), ...options }),
     }).catch(() => {});
 
   new YT.Player('ytPlayer', {
@@ -318,7 +318,7 @@ async function setupYouTubePlayer(videoId, lessonId, lesson, progress) {
 
         ended = true;
         clearYoutubePoll();
-        await sendProgress(event.target.getDuration());
+        await sendProgress(event.target.getDuration(), { ended: true });
         goToNextLesson(lesson.course_id, lesson.id);
       },
     },
@@ -548,12 +548,14 @@ async function renderLesson(lessonId) {
     video.currentTime = maxWatched;
 
     let lastSent = 0;
-    const sendProgress = (position) => {
+    // "return" muhim: 'ended' hodisasida bu promise'ni await qilamiz,
+    // aks holda renderLesson() completion so'rovi tugashini kutmasdan
+    // ishga tushib, eski (hali tugallanmagan) holatni ko'rsatib qolardi.
+    const sendProgress = (position, options = {}) =>
       apiRequest(`/progress/lesson/${lessonId}`, {
         method: 'POST',
-        body: JSON.stringify({ position_seconds: Math.floor(position) }),
+        body: JSON.stringify({ position_seconds: Math.floor(position), ...options }),
       }).catch(() => {});
-    };
 
     video.addEventListener('timeupdate', () => {
       if (video.currentTime > maxWatched) {
@@ -573,7 +575,7 @@ async function renderLesson(lessonId) {
     });
 
     video.addEventListener('ended', async () => {
-      await sendProgress(video.duration);
+      await sendProgress(video.duration, { ended: true });
       renderLesson(lessonId); // uy vazifasi qismini ochish uchun yangi holat bilan qayta chizadi
     });
   }

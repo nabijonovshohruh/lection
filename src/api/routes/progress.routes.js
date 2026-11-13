@@ -4,7 +4,10 @@ const validate = require('../middlewares/validate.middleware');
 
 const router = express.Router();
 
-const updateRules = { position_seconds: { required: true, type: 'number' } };
+const updateRules = {
+  position_seconds: { required: true, type: 'number' },
+  ended: { type: 'boolean' },
+};
 
 router.get('/lesson/:lessonId', controller.getByLesson);
 router.post('/lesson/:lessonId', validate(updateRules), controller.updateWatchPosition);
